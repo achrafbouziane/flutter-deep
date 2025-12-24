@@ -3,9 +3,11 @@ from tensorflow.keras import layers, models
 import numpy as np
 import os
 
-# Create assets directory if it doesn't exist
-if not os.path.exists('../assets'):
-    os.makedirs('../assets')
+# Define assets directory relative to the script location
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+assets_dir = os.path.join(project_root, 'assets')
+os.makedirs(assets_dir, exist_ok=True)
 
 def train_digits():
     print("Loading MNIST data...")
@@ -19,15 +21,42 @@ def train_digits():
     # Reshape for CNN (28, 28, 1)
     x_train = x_train.reshape((-1, 28, 28, 1))
     x_test = x_test.reshape((-1, 28, 28, 1))
+    
+    # DEBUG: Save a grid of images
+    print("Saving debug image grid...")
+    try:
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(10, 10))
+        for i in range(25):
+            plt.subplot(5, 5, i + 1)
+            plt.imshow(x_train[i].reshape(28, 28), cmap='gray')
+            plt.title(f"Label: {y_train[i]}")
+            plt.axis('off')
+        plt.savefig(os.path.join(assets_dir, 'debug_digits.png'))
+        plt.close()
+    except Exception as e:
+        print(f"Debug image failed: {e}")
 
-    print("Building Model...")
+    print("Building Deeper Model with Augmentation...")
     model = models.Sequential([
-        layers.Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)),
+        layers.Input(shape=(28, 28, 1)),
+        layers.RandomRotation(0.1),
+        layers.RandomZoom(0.1),
+        layers.RandomTranslation(0.1, 0.1),
+        
+        # Block 1
+        layers.Conv2D(32, (3, 3), activation='relu', padding='same'),
+        layers.Conv2D(32, (3, 3), activation='relu'),
         layers.MaxPooling2D((2, 2)),
+        
+        # Block 2
+        layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
         layers.Conv2D(64, (3, 3), activation='relu'),
         layers.MaxPooling2D((2, 2)),
+        
         layers.Flatten(),
         layers.Dense(128, activation='relu'),
+        layers.Dropout(0.3), # Increased dropout slightly
         layers.Dense(10, activation='softmax')
     ])
 
@@ -35,22 +64,24 @@ def train_digits():
                   loss='sparse_categorical_crossentropy',
                   metrics=['accuracy'])
 
-    print("Training Model...")
-    model.fit(x_train, y_train, epochs=3, validation_data=(x_test, y_test))
+    print("Training Model (15 epochs)...")
+    model.fit(x_train, y_train, epochs=15, validation_data=(x_test, y_test), batch_size=64)
 
     print("Converting to TFLite...")
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     tflite_model = converter.convert()
 
-    with open('../assets/digits.tflite', 'wb') as f:
+    tflite_path = os.path.join(assets_dir, 'digits.tflite')
+    with open(tflite_path, 'wb') as f:
         f.write(tflite_model)
     
     # Save labels
-    with open('../assets/digits.txt', 'w') as f:
+    txt_path = os.path.join(assets_dir, 'digits.txt')
+    with open(txt_path, 'w') as f:
         for i in range(10):
             f.write(f'{i}\n')
             
-    print("Done! Model saved to ../assets/digits.tflite")
+    print(f"Done! Model saved to {tflite_path}")
 
 if __name__ == '__main__':
     train_digits()

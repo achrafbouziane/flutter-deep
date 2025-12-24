@@ -49,29 +49,70 @@ class ImageUtils {
       throw Exception("Failed to capture image");
     }
 
-    // 6. Decode with 'image' package for resizing and pixel access
+    // 6. Decode with 'image' package
     img.Image? originalImage = img.decodePng(byteData.buffer.asUint8List());
 
     if (originalImage == null) {
       throw Exception("Failed to decode image");
     }
 
-    // 7. Resize to 28x28
-    // Use cubic interpolation for better quality
-    img.Image resized = img.copyResize(originalImage, width: 28, height: 28);
+    // --- MNIST STANDARD PREPROCESSING (Center-and-Scale) ---
+    // This forces the input to be a 20x20 digit centered in a 28x28 box.
     
-    // 8. Convert to Grayscale & Normalize
-    // We expect a flattened array of 28*28 = 784 float values
-    List<double> pixelValues = [];
+    // Step A: Find Bounding Box
+    int minX = originalImage.width;
+    int minY = originalImage.height;
+    int maxX = 0;
+    int maxY = 0;
+    bool foundContent = false;
 
+    for (int y = 0; y < originalImage.height; y++) {
+      for (int x = 0; x < originalImage.width; x++) {
+        img.Pixel pixel = originalImage.getPixel(x, y);
+        if (pixel.luminance > 0) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          foundContent = true;
+        }
+      }
+    }
+
+    if (!foundContent) {
+      // Return zeroed array if empty
+      return List.filled(28 * 28, 0.0);
+    }
+
+    // Step B: Crop to bounding box
+    int w = maxX - minX + 1;
+    int h = maxY - minY + 1;
+    img.Image cropped = img.copyCrop(originalImage, x: minX, y: minY, width: w, height: h);
+
+    // Step C: Square the aspect ratio and Center
+    int maxDim = w > h ? w : h;
+    img.Image squareImg = img.Image(width: maxDim, height: maxDim);
+    img.fill(squareImg, color: img.ColorRgb8(0, 0, 0));
+    
+    // Center cropped on square canvas
+    int dstX = (maxDim - w) ~/ 2;
+    int dstY = (maxDim - h) ~/ 2;
+    img.compositeImage(squareImg, cropped, dstX: dstX, dstY: dstY);
+
+    // Step D: Resize content to 20x20
+    img.Image scaledContent = img.copyResize(squareImg, width: 20, height: 20, interpolation: img.Interpolation.cubic);
+
+    // Step E: Paste into 28x28 black canvas (centered -> 4px margin)
+    img.Image finalImage = img.Image(width: 28, height: 28);
+    img.fill(finalImage, color: img.ColorRgb8(0, 0, 0));
+    img.compositeImage(finalImage, scaledContent, dstX: 4, dstY: 4);
+
+    // Step F: Normalize
+    List<double> pixelValues = [];
     for (int y = 0; y < 28; y++) {
       for (int x = 0; x < 28; x++) {
-        // Get pixel info
-        img.Pixel pixel = resized.getPixel(x, y);
-        // Get luminance (grayscale)
-        double luminance = pixel.luminanceNormalized.toDouble(); // 0.0 to 1.0
-        
-        pixelValues.add(luminance);
+        img.Pixel pixel = finalImage.getPixel(x, y);
+        pixelValues.add(pixel.luminanceNormalized.toDouble());
       }
     }
     

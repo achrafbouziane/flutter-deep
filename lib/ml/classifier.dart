@@ -31,6 +31,10 @@ class Classifier {
       throw Exception('Interpreter not loaded');
     }
 
+    if (input.length != 784) {
+      throw Exception('Input length must be 784 (28x28). Got ${input.length}');
+    }
+
     // Input shape: [1, 28, 28, 1]
     // The input list is 784 long.
     // Reshape to [1, 28, 28, 1] for the model.

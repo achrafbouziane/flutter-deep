@@ -57,14 +57,26 @@ def train_letters():
     except Exception as e:
         print(f"Failed to save debug image: {e}")
 
-    print("Building model...")
+    print("Building Deeper Model for Letters...")
     model = models.Sequential([
-        layers.Conv2D(32, 3, activation='relu', input_shape=(28, 28, 1)),
+        layers.Input(shape=(28, 28, 1)),
+        layers.RandomRotation(0.1),
+        layers.RandomZoom(0.1),
+        layers.RandomTranslation(0.1, 0.1),
+        
+        # Block 1
+        layers.Conv2D(32, 3, activation='relu', padding='same'),
+        layers.Conv2D(32, 3, activation='relu'),
         layers.MaxPooling2D(),
+        
+        # Block 2
+        layers.Conv2D(64, 3, activation='relu', padding='same'),
         layers.Conv2D(64, 3, activation='relu'),
         layers.MaxPooling2D(),
+        
         layers.Flatten(),
-        layers.Dense(128, activation='relu'),
+        layers.Dense(256, activation='relu'), # Larger dense layer for 26 classes
+        layers.Dropout(0.3),
         layers.Dense(26, activation='softmax')
     ])
 
@@ -74,8 +86,8 @@ def train_letters():
         metrics=['accuracy']
     )
 
-    print("Training model...")
-    model.fit(ds_train, epochs=3, validation_data=ds_test)
+    print("Training model (15 epochs)...")
+    model.fit(ds_train, epochs=15, validation_data=ds_test)
 
     print("Converting to TFLite...")
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
